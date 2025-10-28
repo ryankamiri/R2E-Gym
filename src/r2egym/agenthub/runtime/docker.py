@@ -527,9 +527,3 @@ class DockerRuntime(ExecutionEnvironment):
         if self.backend == "docker":
             self.client.close()
 
-    def reset(self):
-        """Reset environment by restarting container."""
-        self.stop_container()
-        self.start_container(
-            self.docker_image, self.command, self.container_name, **self.docker_kwargs
-        )

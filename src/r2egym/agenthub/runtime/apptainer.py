@@ -67,20 +67,24 @@ class ApptainerRuntime(ExecutionEnvironment):
             
             # Try to install chardet if possible
             try:
-                # Try different ways to install chardet
+                # First try uv pip (the package manager used in Docker images)
                 try:
-                    self.run("python -m pip install chardet")
+                    self.run("uv pip install chardet")
                 except Exception:
-                    # Try with python3
+                    # Try with python -m pip
                     try:
-                        self.run("python3 -m pip install chardet")
+                        self.run("python -m pip install chardet")
                     except Exception:
-                        # Try with pip directly
+                        # Try with python3
                         try:
-                            self.run("pip install chardet")
+                            self.run("python3 -m pip install chardet")
                         except Exception:
-                            # Try with pip3
-                            self.run("pip3 install chardet")
+                            # Try with pip directly
+                            try:
+                                self.run("pip install chardet")
+                            except Exception:
+                                # Try with pip3
+                                self.run("pip3 install chardet")
             except Exception as e:
                 self.logger.warning(f"Could not install chardet: {e}")
             
@@ -115,17 +119,24 @@ class ApptainerRuntime(ExecutionEnvironment):
             except Exception as e:
                 self.logger.warning(f"Could not create .venv symlink: {e}")
             try:
-                # Try different ways to install chardet
+                # First try uv pip (the package manager used in Docker images)
                 try:
-                    self.run("python -m pip install chardet")
+                    self.run("uv pip install chardet")
                 except Exception:
+                    # Try with python -m pip
                     try:
-                        self.run("python3 -m pip install chardet")
+                        self.run("python -m pip install chardet")
                     except Exception:
+                        # Try with python3
                         try:
-                            self.run("pip install chardet")
+                            self.run("python3 -m pip install chardet")
                         except Exception:
-                            self.run("pip3 install chardet")
+                            # Try with pip directly
+                            try:
+                                self.run("pip install chardet")
+                            except Exception:
+                                # Try with pip3
+                                self.run("pip3 install chardet")
             except Exception as e:
                 self.logger.warning(f"Could not install chardet: {e}")
         except Exception as e:
@@ -172,17 +183,24 @@ class ApptainerRuntime(ExecutionEnvironment):
             except Exception as e:
                 self.logger.warning(f"Could not update bashrc: {e}")
             try:
-                # Try different ways to install chardet
+                # First try uv pip (the package manager used in Docker images)
                 try:
-                    self.run("python -m pip install chardet")
+                    self.run("uv pip install chardet")
                 except Exception:
+                    # Try with python -m pip
                     try:
-                        self.run("python3 -m pip install chardet")
+                        self.run("python -m pip install chardet")
                     except Exception:
+                        # Try with python3
                         try:
-                            self.run("pip install chardet")
+                            self.run("python3 -m pip install chardet")
                         except Exception:
-                            self.run("pip3 install chardet")
+                            # Try with pip directly
+                            try:
+                                self.run("pip install chardet")
+                            except Exception:
+                                # Try with pip3
+                                self.run("pip3 install chardet")
             except Exception as e:
                 self.logger.warning(f"Could not install chardet: {e}")
         except Exception as e:
@@ -342,7 +360,9 @@ class ApptainerRuntime(ExecutionEnvironment):
             Tuple of (output, error_code)
         """
         exec_workdir = self.repo_path if workdir is None else workdir
-        command = f"cd {exec_workdir} && timeout {timeout} {code} {args}"
+        # Set up environment variables to match Docker image setup
+        env_setup = "export VIRTUAL_ENV=/testbed/.venv && export PATH=$VIRTUAL_ENV/bin:$PATH && export PATH=/root/.cargo/bin:$PATH && export PATH=/root/.local/bin:$PATH && "
+        command = f"cd {exec_workdir} && {env_setup}timeout {timeout} {code} {args}"
         
         cmd = [
             "apptainer", "exec",
@@ -396,7 +416,9 @@ class ApptainerRuntime(ExecutionEnvironment):
     ) -> Tuple[str, str, str]:
         """Execute command with separate stdout/stderr streams."""
         exec_workdir = self.repo_path if workdir is None else workdir
-        command = f"cd {exec_workdir} && timeout {timeout} {code} {args}"
+        # Set up environment variables to match Docker image setup
+        env_setup = "export VIRTUAL_ENV=/testbed/.venv && export PATH=$VIRTUAL_ENV/bin:$PATH && export PATH=/root/.cargo/bin:$PATH && export PATH=/root/.local/bin:$PATH && "
+        command = f"cd {exec_workdir} && {env_setup}timeout {timeout} {code} {args}"
         
         cmd = [
             "apptainer", "exec",

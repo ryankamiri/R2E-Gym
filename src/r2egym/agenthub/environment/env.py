@@ -10,7 +10,7 @@ import logging
 from r2egym.agenthub.action import Action
 from r2egym.agenthub.utils.log import get_logger
 from r2egym.agenthub.observation import Observation
-from r2egym.agenthub.runtime.docker import DockerRuntime
+# We'll import at runtime based on backend to avoid circular imports
 from r2egym.agenthub.agent.commands import ParseCommandBash
 
 cmd_parser = ParseCommandBash()
@@ -44,8 +44,8 @@ class RepoEnv(gym.Env):
             #logging.getLogger().setLevel(logging.CRITICAL)  # Disable root logger
             #logging.disable(logging.CRITICAL)  # Disable all logging
 
-        self.runtime = DockerRuntime(
-            ds=args.ds, command=["/bin/bash", "-l"], logger=self.logger, backend=backend
+        self.runtime = self._create_runtime(
+            args.ds, ["/bin/bash", "-l"], self.logger, backend
         )
 
         self.args = args
@@ -60,6 +60,23 @@ class RepoEnv(gym.Env):
             f"Initialized Env: {self.runtime.repo_name} with image: {self.runtime.docker_image}"
         )
 
+    def _create_runtime(self, ds, command, logger, backend):
+        """Factory method to create appropriate runtime based on backend."""
+        if backend in ["docker", "kubernetes"]:
+            from r2egym.agenthub.runtime.docker import DockerRuntime
+            return DockerRuntime(
+                ds=ds, command=command,
+                logger=logger, backend=backend
+            )
+        elif backend == "apptainer":
+            from r2egym.agenthub.runtime.apptainer import ApptainerRuntime
+            return ApptainerRuntime(
+                ds=ds, command=command,
+                logger=logger
+            )
+        else:
+            raise ValueError(f"Unknown backend: {backend}. Must be one of: docker, kubernetes, apptainer")
+
     def reset(self) -> Dict[str, Any]:
         """
         Resets the environment and returns an initial observation.
@@ -71,8 +88,8 @@ class RepoEnv(gym.Env):
         self.state = None
         self.done = False
         # also just recreate env again with the same args
-        self.runtime = DockerRuntime(
-            ds=self.args.ds, command=["/bin/bash", "-l"], logger=self.logger, backend=self.backend
+        self.runtime = self._create_runtime(
+            self.args.ds, ["/bin/bash", "-l"], self.logger, self.backend
         )
         return self.observation  # self.get_observation()
 

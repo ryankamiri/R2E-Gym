@@ -212,22 +212,45 @@ class ApptainerRuntime(ExecutionEnvironment):
         test_script_locations = [
             f"{self.alt_path}/run_tests.sh",
             "/run_tests.sh", 
-            "/tmp/run_tests.sh"
+            "/tmp/run_tests.sh",
+            "/testbed/run_tests.sh",
+            f"{self.repo_path}/run_tests.sh"
         ]
+        
+        self.logger.info(f"Looking for test script in locations: {test_script_locations}")
+        
+        # Debug: List files in common locations
+        try:
+            self.logger.info("Debug: Listing files in /testbed:")
+            ls_output, _ = self.run("ls -la /testbed/")
+            self.logger.info(f"/testbed contents: {ls_output}")
+        except Exception as e:
+            self.logger.warning(f"Could not list /testbed: {e}")
+        
+        try:
+            self.logger.info("Debug: Listing files in /:")
+            ls_output, _ = self.run("ls -la /")
+            self.logger.info(f"/ contents: {ls_output}")
+        except Exception as e:
+            self.logger.warning(f"Could not list /: {e}")
         
         for script_path in test_script_locations:
             try:
                 # Check if the script exists
                 check_output, _ = self.run(f"test -f {script_path} && echo 'exists'")
                 if "exists" in check_output:
+                    self.logger.info(f"Found test script at: {script_path}")
                     output, error_code = self.run(f"bash {script_path}", timeout=timeout)
                     output = re.sub(r"\x1b\[[0-9;]*m|\r", "", output)
                     return output, error_code
+                else:
+                    self.logger.debug(f"Test script not found at: {script_path}")
             except Exception as e:
-                self.logger.warning(f"Test script not found at {script_path}: {e}")
+                self.logger.warning(f"Error checking test script at {script_path}: {e}")
                 continue
         
         # If no test script found, return error
+        self.logger.error("No test script found in any expected location")
         return "No test script found in any expected location", "-1"
     
     def demux_run_tests(self) -> Tuple[str, str, str]:
@@ -236,23 +259,31 @@ class ApptainerRuntime(ExecutionEnvironment):
         test_script_locations = [
             f"{self.alt_path}/run_tests.sh",
             "/run_tests.sh", 
-            "/tmp/run_tests.sh"
+            "/tmp/run_tests.sh",
+            "/testbed/run_tests.sh",
+            f"{self.repo_path}/run_tests.sh"
         ]
+        
+        self.logger.info(f"Looking for test script in locations: {test_script_locations}")
         
         for script_path in test_script_locations:
             try:
                 # Check if the script exists
                 check_output, _ = self.run(f"test -f {script_path} && echo 'exists'")
                 if "exists" in check_output:
+                    self.logger.info(f"Found test script at: {script_path}")
                     stdout, stderr, error_code = self.demux_run(f"bash {script_path}")
                     stdout = re.sub(r"\x1b\[[0-9;]*m|\r", "", stdout)
                     stderr = re.sub(r"\x1b\[[0-9;]*m|\r", "", stderr)
                     return stdout, stderr, error_code
+                else:
+                    self.logger.debug(f"Test script not found at: {script_path}")
             except Exception as e:
-                self.logger.warning(f"Test script not found at {script_path}: {e}")
+                self.logger.warning(f"Error checking test script at {script_path}: {e}")
                 continue
         
         # If no test script found, return error
+        self.logger.error("No test script found in any expected location")
         return "", "No test script found in any expected location", "-1"
 
     def start_container(self, image: str, command: str, name: str, **kwargs):

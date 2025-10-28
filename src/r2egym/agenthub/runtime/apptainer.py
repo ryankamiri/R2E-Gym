@@ -67,7 +67,20 @@ class ApptainerRuntime(ExecutionEnvironment):
             
             # Try to install chardet if possible
             try:
-                self.run("python -m pip install chardet")
+                # Try different ways to install chardet
+                try:
+                    self.run("python -m pip install chardet")
+                except Exception:
+                    # Try with python3
+                    try:
+                        self.run("python3 -m pip install chardet")
+                    except Exception:
+                        # Try with pip directly
+                        try:
+                            self.run("pip install chardet")
+                        except Exception:
+                            # Try with pip3
+                            self.run("pip3 install chardet")
             except Exception as e:
                 self.logger.warning(f"Could not install chardet: {e}")
             
@@ -102,7 +115,17 @@ class ApptainerRuntime(ExecutionEnvironment):
             except Exception as e:
                 self.logger.warning(f"Could not create .venv symlink: {e}")
             try:
-                self.run("python -m pip install chardet")
+                # Try different ways to install chardet
+                try:
+                    self.run("python -m pip install chardet")
+                except Exception:
+                    try:
+                        self.run("python3 -m pip install chardet")
+                    except Exception:
+                        try:
+                            self.run("pip install chardet")
+                        except Exception:
+                            self.run("pip3 install chardet")
             except Exception as e:
                 self.logger.warning(f"Could not install chardet: {e}")
         except Exception as e:
@@ -128,10 +151,17 @@ class ApptainerRuntime(ExecutionEnvironment):
                 temp_file.flush()
                 temp_file_path = temp_file.name
             
-            self.copy_to_container(temp_file_path, "/run_tests.sh")
+            self.copy_to_container(temp_file_path, "/tmp/run_tests.sh")
             os.unlink(temp_file_path)
             
-            self.run("chmod +x /run_tests.sh")
+            self.run("chmod +x /tmp/run_tests.sh")
+            # Copy to a writable location if needed
+            try:
+                self.run("cp /tmp/run_tests.sh /run_tests.sh")
+            except Exception as e:
+                self.logger.warning(f"Could not copy test script to /run_tests.sh: {e}")
+                # Use the tmp version
+                self.run("ln -sf /tmp/run_tests.sh /run_tests.sh")
             # Skip symlink creation in read-only areas
             try:
                 self.run(f"ln -s /opt/miniconda3/envs/testbed /root/.venv")
@@ -142,11 +172,70 @@ class ApptainerRuntime(ExecutionEnvironment):
             except Exception as e:
                 self.logger.warning(f"Could not update bashrc: {e}")
             try:
-                self.run("python -m pip install chardet")
+                # Try different ways to install chardet
+                try:
+                    self.run("python -m pip install chardet")
+                except Exception:
+                    try:
+                        self.run("python3 -m pip install chardet")
+                    except Exception:
+                        try:
+                            self.run("pip install chardet")
+                        except Exception:
+                            self.run("pip3 install chardet")
             except Exception as e:
                 self.logger.warning(f"Could not install chardet: {e}")
         except Exception as e:
             self.logger.error(f"Error setting up SWEsmith environment: {repr(e)}")
+    
+    def run_tests(self, timeout: int = 300) -> Tuple[str, str]:
+        """Override run_tests to handle Apptainer-specific test script locations."""
+        # Try different locations for the test script
+        test_script_locations = [
+            f"{self.alt_path}/run_tests.sh",
+            "/run_tests.sh", 
+            "/tmp/run_tests.sh"
+        ]
+        
+        for script_path in test_script_locations:
+            try:
+                # Check if the script exists
+                check_output, _ = self.run(f"test -f {script_path} && echo 'exists'")
+                if "exists" in check_output:
+                    output, error_code = self.run(f"bash {script_path}", timeout=timeout)
+                    output = re.sub(r"\x1b\[[0-9;]*m|\r", "", output)
+                    return output, error_code
+            except Exception as e:
+                self.logger.warning(f"Test script not found at {script_path}: {e}")
+                continue
+        
+        # If no test script found, return error
+        return "No test script found in any expected location", "-1"
+    
+    def demux_run_tests(self) -> Tuple[str, str, str]:
+        """Override demux_run_tests to handle Apptainer-specific test script locations."""
+        # Try different locations for the test script
+        test_script_locations = [
+            f"{self.alt_path}/run_tests.sh",
+            "/run_tests.sh", 
+            "/tmp/run_tests.sh"
+        ]
+        
+        for script_path in test_script_locations:
+            try:
+                # Check if the script exists
+                check_output, _ = self.run(f"test -f {script_path} && echo 'exists'")
+                if "exists" in check_output:
+                    stdout, stderr, error_code = self.demux_run(f"bash {script_path}")
+                    stdout = re.sub(r"\x1b\[[0-9;]*m|\r", "", stdout)
+                    stderr = re.sub(r"\x1b\[[0-9;]*m|\r", "", stderr)
+                    return stdout, stderr, error_code
+            except Exception as e:
+                self.logger.warning(f"Test script not found at {script_path}: {e}")
+                continue
+        
+        # If no test script found, return error
+        return "", "No test script found in any expected location", "-1"
 
     def start_container(self, image: str, command: str, name: str, **kwargs):
         """Start an Apptainer instance."""

@@ -24,7 +24,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from r2egym.logging import setup_logging, INFO
 from r2egym.agenthub.environment.env import EnvArgs, RepoEnv
-from r2egym.agenthub.runtime.apptainer import ApptainerRuntime
 from datasets import load_dataset
 
 

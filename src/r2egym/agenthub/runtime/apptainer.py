@@ -6,7 +6,7 @@ import re
 from typing import Tuple
 
 from r2egym.agenthub.runtime.base import ExecutionEnvironment, CMD_TIMEOUT
-from r2egym.agenthub.trajectory.swebench_utils import get_test_command
+from r2egym.swesmith.utils import get_test_command
 
 
 ##############################################################################

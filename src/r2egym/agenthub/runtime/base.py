@@ -236,14 +236,35 @@ class ExecutionEnvironment(ABC):
             self.run("uv pip install chardet")
             self.run("find . -name '*.pyc' -delete")
             self.run("find . -name '__pycache__' -exec rm -rf {} +")
-            self.run("find /r2e_tests -name '*.pyc' -delete")
-            self.run("find /r2e_tests -name '__pycache__' -exec rm -rf {} +")
+            
+            # Clean r2e_tests cache if it exists
+            try:
+                self.run("find /r2e_tests -name '*.pyc' -delete")
+                self.run("find /r2e_tests -name '__pycache__' -exec rm -rf {} +")
+            except Exception as e:
+                self.logger.warning(f"Could not clean /r2e_tests cache: {e}")
+                # Try cleaning from repo_path
+                try:
+                    self.run(f"find {self.repo_path}/r2e_tests -name '*.pyc' -delete")
+                    self.run(f"find {self.repo_path}/r2e_tests -name '__pycache__' -exec rm -rf {{}} +")
+                except Exception as e2:
+                    self.logger.warning(f"Could not clean r2e_tests cache from any location: {e2}")
             
             for skip_file in SKIP_FILES_NEW:
                 self.run(f"mv {self.repo_path}/{skip_file} {self.alt_path}/{skip_file}")
             
-            self.run(f"mv /r2e_tests {self.alt_path}/r2e_tests")
-            self.run(f"ln -s {self.alt_path}/r2e_tests {self.repo_path}/r2e_tests")
+            # Only move r2e_tests if it exists
+            try:
+                self.run(f"mv /r2e_tests {self.alt_path}/r2e_tests")
+                self.run(f"ln -s {self.alt_path}/r2e_tests {self.repo_path}/r2e_tests")
+            except Exception as e:
+                self.logger.warning(f"Could not move r2e_tests: {e}")
+                # Try to find r2e_tests in other locations
+                try:
+                    self.run(f"mv {self.repo_path}/r2e_tests {self.alt_path}/r2e_tests")
+                    self.run(f"ln -s {self.alt_path}/r2e_tests {self.repo_path}/r2e_tests")
+                except Exception as e2:
+                    self.logger.warning(f"Could not find r2e_tests in any location: {e2}")
         except Exception as e:
             self.logger.error(f"Error setting up environment: {repr(e)}")
     

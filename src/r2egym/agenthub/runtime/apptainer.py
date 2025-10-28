@@ -190,3 +190,7 @@ class ApptainerRuntime(ExecutionEnvironment):
         except Exception as e:
             self.logger.error(f"Error copying file to container: {e}")
             raise
+    
+    def close(self):
+        """Close the runtime."""
+        self.stop_container()

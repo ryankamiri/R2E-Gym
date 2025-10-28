@@ -54,6 +54,29 @@ class ApptainerRuntime(ExecutionEnvironment):
 
     def start_container(self, image: str, command: str, name: str, **kwargs):
         """Start an Apptainer instance."""
+        # Convert to Apptainer URI if needed
+        if not image.startswith("docker://"):
+            apptainer_uri = f"docker://{image}"
+        else:
+            apptainer_uri = image
+        
+        self.logger.info(f"Starting Apptainer instance for image: {apptainer_uri}")
+        
+        # Check if image is already cached
+        try:
+            cache_check = subprocess.run(
+                ["apptainer", "cache", "list"],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            if apptainer_uri in cache_check.stdout:
+                self.logger.info("Image found in cache, starting instance...")
+            else:
+                self.logger.info("Image not in cache, will pull from registry...")
+        except Exception as e:
+            self.logger.warning(f"Could not check cache: {e}")
+        
         cmd = ["apptainer", "instance", "start"]
         
         # Add environment variables if provided
@@ -61,19 +84,24 @@ class ApptainerRuntime(ExecutionEnvironment):
             for key, val in kwargs["environment"].items():
                 cmd.extend(["--env", f"{key}={val}"])
         
-        cmd.extend([image, name])
+        cmd.extend([apptainer_uri, name])
         
         try:
+            # Use longer timeout for image pulling (10 minutes)
             result = subprocess.run(
                 cmd,
                 check=True,
                 capture_output=True,
                 text=True,
-                timeout=120
+                timeout=600  # 10 minutes for image pull
             )
             self.container_name = name
             self.container = name
             self.logger.info(f"Started Apptainer instance: {name}")
+        except subprocess.TimeoutExpired:
+            self.logger.error(f"Timeout starting Apptainer instance (10 minutes). Image may be too large or network too slow.")
+            self.logger.info("Consider pre-pulling the image with: apptainer pull docker://<image>")
+            raise RuntimeError(f"Timeout starting Apptainer instance. Image pull took too long.")
         except subprocess.CalledProcessError as e:
             self.logger.error(f"Failed to start Apptainer instance: {e.stderr}")
             raise RuntimeError(f"Failed to start Apptainer instance: {e.stderr}")

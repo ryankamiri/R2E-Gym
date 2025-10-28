@@ -237,16 +237,49 @@ If your HPC cluster uses Apptainer (formerly Singularity) instead of Docker:
    apptainer --version
    ```
 
-2. **Run timing script with Apptainer:**
+2. **Pre-pull Docker images (recommended to avoid timeouts):**
+   ```bash
+   # Pre-pull common R2E-Gym images
+   bash ./prepull_apptainer_images.sh
+   
+   # Or pre-pull specific images
+   bash ./prepull_apptainer_images.sh namanjain12/aiohttp_final:f0d74880deec8fcd982bce639c93c5e130d41198
+   ```
+
+3. **Run timing script with Apptainer:**
    ```bash
    python time_golden_patch.py --env_idx 0 --backend apptainer
    ```
 
-3. **Apptainer automatically handles Docker images:**
+4. **Apptainer automatically handles Docker images:**
    - Converts Docker URIs to Apptainer format
    - Pulls images from Docker Hub transparently
    - Caches images locally (usually in `~/.apptainer/cache/`)
    - No root privileges required
+
+### Troubleshooting Apptainer Timeouts
+
+If you get timeout errors when starting Apptainer instances:
+
+1. **Pre-pull the image first:**
+   ```bash
+   apptainer pull docker://namanjain12/aiohttp_final:f0d74880deec8fcd982bce639c93c5e130d41198
+   ```
+
+2. **Check if image is cached:**
+   ```bash
+   apptainer cache list
+   ```
+
+3. **Clean cache if corrupted:**
+   ```bash
+   apptainer cache clean
+   ```
+
+4. **Use the pre-pull script:**
+   ```bash
+   bash ./prepull_apptainer_images.sh
+   ```
 
 ## Additional Resources
 

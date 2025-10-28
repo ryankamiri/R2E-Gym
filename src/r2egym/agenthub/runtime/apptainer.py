@@ -61,111 +61,25 @@ class ApptainerRuntime(ExecutionEnvironment):
             return self.setup_env_swesmith()
         
         try:
-            # For Apptainer, we'll work with the existing environment
-            # and avoid creating symlinks in read-only areas
-            self.logger.info("Setting up Apptainer environment (read-only aware)")
+            # Set up environment exactly like Docker does
+            self.run(f"ln -s {self.repo_path}/.venv {self.alt_path}/.venv")
+            self.run(f"ln -s {self.repo_path}/.venv/bin/python {self.alt_path}/.local/bin/python")
+            self.run(f"ln -s {self.repo_path}/.venv/bin/python {self.alt_path}/.local/bin/python3")
+            self.run(f"find {self.repo_path}/.venv/bin -type f -executable -exec ln -sf {{}} {self.alt_path}/.local/bin/ \\;")
+            self.run("uv pip install chardet")
+            self.run("find . -name '*.pyc' -delete")
+            self.run("find . -name '__pycache__' -exec rm -rf {} +")
+            self.run("find /r2e_tests -name '*.pyc' -delete")
+            self.run("find /r2e_tests -name '__pycache__' -exec rm -rf {} +")
             
-            # Try to install chardet if possible
-            try:
-                # First try uv pip (the package manager used in Docker images)
-                try:
-                    self.run("uv pip install chardet")
-                except Exception:
-                    # Try with python -m pip
-                    try:
-                        self.run("python -m pip install chardet")
-                    except Exception:
-                        # Try with python3
-                        try:
-                            self.run("python3 -m pip install chardet")
-                        except Exception:
-                            # Try with pip directly
-                            try:
-                                self.run("pip install chardet")
-                            except Exception:
-                                # Try with pip3
-                                self.run("pip3 install chardet")
-            except Exception as e:
-                self.logger.warning(f"Could not install chardet: {e}")
+            from r2egym.agenthub.runtime.base import SKIP_FILES_NEW
+            for skip_file in SKIP_FILES_NEW:
+                self.run(f"mv {self.repo_path}/{skip_file} {self.alt_path}/{skip_file}")
             
-            # Clean up Python cache files if possible
-            try:
-                self.run("find . -name '*.pyc' -delete")
-                self.run("find . -name '__pycache__' -exec rm -rf {} +")
-            except Exception as e:
-                self.logger.warning(f"Could not clean Python cache: {e}")
-            
-            # Handle r2e_tests directory (copy to writable location)
-            try:
-                # Check if /r2e_tests exists
-                check_output, _ = self.run("test -d /r2e_tests && echo 'exists'")
-                if "exists" in check_output:
-                    self.logger.info("Found /r2e_tests directory, copying to writable location")
-                    # Copy r2e_tests to /tmp/r2e_tests (writable location)
-                    self.run("cp -r /r2e_tests /tmp/r2e_tests")
-                    # Create symlink from /testbed/r2e_tests to /tmp/r2e_tests
-                    try:
-                        self.run("ln -sf /tmp/r2e_tests /testbed/r2e_tests")
-                        self.logger.info("Created symlink /testbed/r2e_tests -> /tmp/r2e_tests")
-                    except Exception as e:
-                        self.logger.warning(f"Could not create symlink: {e}")
-                        # Try to copy directly to /testbed/r2e_tests
-                        try:
-                            self.run("cp -r /tmp/r2e_tests /testbed/r2e_tests")
-                            self.logger.info("Copied r2e_tests to /testbed/r2e_tests")
-                        except Exception as e2:
-                            self.logger.warning(f"Could not copy to /testbed: {e2}")
-                    
-                    # Clean up Python cache files in the copied directory
-                    try:
-                        self.run("find /tmp/r2e_tests -name '*.pyc' -delete")
-                        self.run("find /tmp/r2e_tests -name '__pycache__' -exec rm -rf {} +")
-                    except Exception as e:
-                        self.logger.warning(f"Could not clean r2e_tests cache: {e}")
-                else:
-                    self.logger.info("No /r2e_tests directory found")
-            except Exception as e:
-                self.logger.warning(f"Could not handle r2e_tests: {e}")
-            
-            # Handle skip files (copy to writable location)
-            try:
-                from r2egym.agenthub.runtime.base import SKIP_FILES_NEW
-                for skip_file in SKIP_FILES_NEW:
-                    try:
-                        if skip_file == "r2e_tests":
-                            # Already handled above, skip
-                            continue
-                        elif skip_file == "run_tests.sh":
-                            # Handle run_tests.sh specially
-                            check_output, _ = self.run(f"test -f {self.repo_path}/{skip_file} && echo 'exists'")
-                            if "exists" in check_output:
-                                # Copy to /tmp first, then to alt_path
-                                self.run(f"cp {self.repo_path}/{skip_file} /tmp/{skip_file}")
-                                self.run(f"cp /tmp/{skip_file} {self.alt_path}/{skip_file}")
-                                # Create symlink back to repo_path
-                                try:
-                                    self.run(f"ln -sf {self.alt_path}/{skip_file} {self.repo_path}/{skip_file}")
-                                    self.logger.info(f"Created symlink for {skip_file}")
-                                except Exception as e:
-                                    self.logger.warning(f"Could not create symlink for {skip_file}: {e}")
-                                self.logger.info(f"Copied {skip_file} to {self.alt_path}")
-                        else:
-                            # Handle other skip files
-                            check_output, _ = self.run(f"test -f {self.repo_path}/{skip_file} && echo 'exists'")
-                            if "exists" in check_output:
-                                # Copy to /tmp first, then to alt_path
-                                self.run(f"cp {self.repo_path}/{skip_file} /tmp/{skip_file}")
-                                self.run(f"cp /tmp/{skip_file} {self.alt_path}/{skip_file}")
-                                self.logger.info(f"Copied {skip_file} to {self.alt_path}")
-                    except Exception as e:
-                        self.logger.warning(f"Could not copy {skip_file}: {e}")
-            except Exception as e:
-                self.logger.warning(f"Could not handle skip files: {e}")
-            
-            self.logger.info("Apptainer environment setup completed (read-only aware)")
-            
+            self.run(f"mv /r2e_tests {self.alt_path}/r2e_tests")
+            self.run(f"ln -s {self.alt_path}/r2e_tests {self.repo_path}/r2e_tests")
         except Exception as e:
-            self.logger.error(f"Error setting up Apptainer environment: {repr(e)}")
+            self.logger.error(f"Error setting up environment: {repr(e)}")
     
     def setup_env_swebench(self):
         """SWE-bench setup for Apptainer."""
@@ -276,23 +190,6 @@ class ApptainerRuntime(ExecutionEnvironment):
             f"{self.repo_path}/run_tests.sh"
         ]
         
-        self.logger.info(f"Looking for test script in locations: {test_script_locations}")
-        
-        # Debug: List files in common locations
-        try:
-            self.logger.info("Debug: Listing files in /testbed:")
-            ls_output, _ = self.run("ls -la /testbed/")
-            self.logger.info(f"/testbed contents: {ls_output}")
-        except Exception as e:
-            self.logger.warning(f"Could not list /testbed: {e}")
-        
-        try:
-            self.logger.info("Debug: Listing files in /:")
-            ls_output, _ = self.run("ls -la /")
-            self.logger.info(f"/ contents: {ls_output}")
-        except Exception as e:
-            self.logger.warning(f"Could not list /: {e}")
-        
         for script_path in test_script_locations:
             try:
                 # Check if the script exists
@@ -322,8 +219,6 @@ class ApptainerRuntime(ExecutionEnvironment):
             "/testbed/run_tests.sh",
             f"{self.repo_path}/run_tests.sh"
         ]
-        
-        self.logger.info(f"Looking for test script in locations: {test_script_locations}")
         
         for script_path in test_script_locations:
             try:

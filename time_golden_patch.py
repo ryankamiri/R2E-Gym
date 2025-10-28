@@ -112,10 +112,25 @@ def get_golden_patch(ds: Dict[str, Any]) -> str:
     Returns:
         The golden patch string
     """
+    # Try different ways to get the patch
     if 'patch' in ds:
         return ds['patch']
+    elif 'parsed_commit_content' in ds:
+        # Parse the commit content to get the patch
+        from r2egym.commit_models.diff_classes import ParsedCommit
+        import json
+        
+        parsed_commit = ParsedCommit(**json.loads(ds['parsed_commit_content']))
+        return parsed_commit.get_patch(test_file=True, non_test_file=True)
+    elif 'parsed_commit' in ds:
+        # Parse the commit content to get the patch
+        from r2egym.commit_models.diff_classes import ParsedCommit
+        import json
+        
+        parsed_commit = ParsedCommit(**json.loads(ds['parsed_commit']))
+        return parsed_commit.get_patch(test_file=True, non_test_file=True)
     else:
-        raise ValueError("No 'patch' key found in dataset entry. Cannot get golden patch.")
+        raise ValueError("No 'patch', 'parsed_commit_content', or 'parsed_commit' key found in dataset entry. Cannot get golden patch.")
 
 
 def time_golden_patch_execution(

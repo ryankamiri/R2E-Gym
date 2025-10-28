@@ -6,6 +6,7 @@ import re
 from typing import Tuple
 
 from r2egym.agenthub.runtime.base import ExecutionEnvironment, CMD_TIMEOUT
+from r2egym.agenthub.trajectory.swebench_utils import get_test_command
 
 
 ##############################################################################
@@ -51,6 +52,101 @@ class ApptainerRuntime(ExecutionEnvironment):
         self.logger.info("Docker image: %s", self.docker_image)
         self.logger.info("Apptainer image: %s", self.apptainer_image)
         self.logger.info("Container name: %s", self.container_name)
+    
+    def setup_env(self):
+        """Apptainer-specific environment setup that avoids read-only file system issues."""
+        if self.swebench_verified:
+            return self.setup_env_swebench()
+        elif self.swesmith:
+            return self.setup_env_swesmith()
+        
+        try:
+            # For Apptainer, we'll work with the existing environment
+            # and avoid creating symlinks in read-only areas
+            self.logger.info("Setting up Apptainer environment (read-only aware)")
+            
+            # Try to install chardet if possible
+            try:
+                self.run("python -m pip install chardet")
+            except Exception as e:
+                self.logger.warning(f"Could not install chardet: {e}")
+            
+            # Clean up Python cache files if possible
+            try:
+                self.run("find . -name '*.pyc' -delete")
+                self.run("find . -name '__pycache__' -exec rm -rf {} +")
+            except Exception as e:
+                self.logger.warning(f"Could not clean Python cache: {e}")
+            
+            # Try to handle r2e_tests if it exists
+            try:
+                self.run("find /r2e_tests -name '*.pyc' -delete")
+                self.run("find /r2e_tests -name '__pycache__' -exec rm -rf {} +")
+            except Exception as e:
+                self.logger.warning(f"Could not clean r2e_tests cache: {e}")
+            
+            # Skip file operations that require write access to read-only areas
+            self.logger.info("Apptainer environment setup completed (read-only aware)")
+            
+        except Exception as e:
+            self.logger.error(f"Error setting up Apptainer environment: {repr(e)}")
+    
+    def setup_env_swebench(self):
+        """SWE-bench setup for Apptainer."""
+        try:
+            self.run("chmod +x /run_tests.sh")
+            self.alt_path = "/"
+            # Skip symlink creation in read-only areas
+            try:
+                self.run(f"ln -s /opt/miniconda3/envs/testbed /root/.venv")
+            except Exception as e:
+                self.logger.warning(f"Could not create .venv symlink: {e}")
+            try:
+                self.run("python -m pip install chardet")
+            except Exception as e:
+                self.logger.warning(f"Could not install chardet: {e}")
+        except Exception as e:
+            self.logger.error(f"Error setting up SWE-bench environment: {repr(e)} @ {self.docker_image}")
+    
+    def setup_env_swesmith(self):
+        """SWEsmith setup for Apptainer."""
+        try:
+            commit_id = self.ds['base_commit']
+            self.run("git fetch")
+            self.run(f"git checkout {commit_id}")
+            test_command, _ = get_test_command(self.ds)
+            eval_script_content = "\n".join(
+                [
+                    "#!/bin/bash", "set -uxo pipefail", "source /opt/miniconda3/bin/activate",
+                    f"conda activate testbed", f"cd testbed/", f": '>>>>> Start Test Output'",
+                    test_command, f": '>>>>> End Test Output'",
+                ]
+            ) + "\n"
+            
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.sh') as temp_file:
+                temp_file.write(eval_script_content)
+                temp_file.flush()
+                temp_file_path = temp_file.name
+            
+            self.copy_to_container(temp_file_path, "/run_tests.sh")
+            os.unlink(temp_file_path)
+            
+            self.run("chmod +x /run_tests.sh")
+            # Skip symlink creation in read-only areas
+            try:
+                self.run(f"ln -s /opt/miniconda3/envs/testbed /root/.venv")
+            except Exception as e:
+                self.logger.warning(f"Could not create .venv symlink: {e}")
+            try:
+                self.run('echo \'export PATH="/usr/local/bin:$PATH"\' >> ~/.bashrc')
+            except Exception as e:
+                self.logger.warning(f"Could not update bashrc: {e}")
+            try:
+                self.run("python -m pip install chardet")
+            except Exception as e:
+                self.logger.warning(f"Could not install chardet: {e}")
+        except Exception as e:
+            self.logger.error(f"Error setting up SWEsmith environment: {repr(e)}")
 
     def start_container(self, image: str, command: str, name: str, **kwargs):
         """Start an Apptainer instance."""
@@ -78,6 +174,13 @@ class ApptainerRuntime(ExecutionEnvironment):
             self.logger.warning(f"Could not check cache: {e}")
         
         cmd = ["apptainer", "instance", "start"]
+        
+        # Add writable tmpfs for file system operations
+        cmd.extend(["--writable-tmpfs"])
+        
+        # Add bind mounts for working directories
+        cmd.extend(["--bind", "/tmp:/tmp"])
+        cmd.extend(["--bind", "/var/tmp:/var/tmp"])
         
         # Add environment variables if provided
         if "environment" in kwargs:

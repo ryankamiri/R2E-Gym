@@ -95,14 +95,73 @@ class ApptainerRuntime(ExecutionEnvironment):
             except Exception as e:
                 self.logger.warning(f"Could not clean Python cache: {e}")
             
-            # Try to handle r2e_tests if it exists
+            # Handle r2e_tests directory (copy to writable location)
             try:
-                self.run("find /r2e_tests -name '*.pyc' -delete")
-                self.run("find /r2e_tests -name '__pycache__' -exec rm -rf {} +")
+                # Check if /r2e_tests exists
+                check_output, _ = self.run("test -d /r2e_tests && echo 'exists'")
+                if "exists" in check_output:
+                    self.logger.info("Found /r2e_tests directory, copying to writable location")
+                    # Copy r2e_tests to /tmp/r2e_tests (writable location)
+                    self.run("cp -r /r2e_tests /tmp/r2e_tests")
+                    # Create symlink from /testbed/r2e_tests to /tmp/r2e_tests
+                    try:
+                        self.run("ln -sf /tmp/r2e_tests /testbed/r2e_tests")
+                        self.logger.info("Created symlink /testbed/r2e_tests -> /tmp/r2e_tests")
+                    except Exception as e:
+                        self.logger.warning(f"Could not create symlink: {e}")
+                        # Try to copy directly to /testbed/r2e_tests
+                        try:
+                            self.run("cp -r /tmp/r2e_tests /testbed/r2e_tests")
+                            self.logger.info("Copied r2e_tests to /testbed/r2e_tests")
+                        except Exception as e2:
+                            self.logger.warning(f"Could not copy to /testbed: {e2}")
+                    
+                    # Clean up Python cache files in the copied directory
+                    try:
+                        self.run("find /tmp/r2e_tests -name '*.pyc' -delete")
+                        self.run("find /tmp/r2e_tests -name '__pycache__' -exec rm -rf {} +")
+                    except Exception as e:
+                        self.logger.warning(f"Could not clean r2e_tests cache: {e}")
+                else:
+                    self.logger.info("No /r2e_tests directory found")
             except Exception as e:
-                self.logger.warning(f"Could not clean r2e_tests cache: {e}")
+                self.logger.warning(f"Could not handle r2e_tests: {e}")
             
-            # Skip file operations that require write access to read-only areas
+            # Handle skip files (copy to writable location)
+            try:
+                from r2egym.agenthub.runtime.base import SKIP_FILES_NEW
+                for skip_file in SKIP_FILES_NEW:
+                    try:
+                        if skip_file == "r2e_tests":
+                            # Already handled above, skip
+                            continue
+                        elif skip_file == "run_tests.sh":
+                            # Handle run_tests.sh specially
+                            check_output, _ = self.run(f"test -f {self.repo_path}/{skip_file} && echo 'exists'")
+                            if "exists" in check_output:
+                                # Copy to /tmp first, then to alt_path
+                                self.run(f"cp {self.repo_path}/{skip_file} /tmp/{skip_file}")
+                                self.run(f"cp /tmp/{skip_file} {self.alt_path}/{skip_file}")
+                                # Create symlink back to repo_path
+                                try:
+                                    self.run(f"ln -sf {self.alt_path}/{skip_file} {self.repo_path}/{skip_file}")
+                                    self.logger.info(f"Created symlink for {skip_file}")
+                                except Exception as e:
+                                    self.logger.warning(f"Could not create symlink for {skip_file}: {e}")
+                                self.logger.info(f"Copied {skip_file} to {self.alt_path}")
+                        else:
+                            # Handle other skip files
+                            check_output, _ = self.run(f"test -f {self.repo_path}/{skip_file} && echo 'exists'")
+                            if "exists" in check_output:
+                                # Copy to /tmp first, then to alt_path
+                                self.run(f"cp {self.repo_path}/{skip_file} /tmp/{skip_file}")
+                                self.run(f"cp /tmp/{skip_file} {self.alt_path}/{skip_file}")
+                                self.logger.info(f"Copied {skip_file} to {self.alt_path}")
+                    except Exception as e:
+                        self.logger.warning(f"Could not copy {skip_file}: {e}")
+            except Exception as e:
+                self.logger.warning(f"Could not handle skip files: {e}")
+            
             self.logger.info("Apptainer environment setup completed (read-only aware)")
             
         except Exception as e:

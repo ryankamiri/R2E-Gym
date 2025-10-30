@@ -192,7 +192,8 @@ class ApptainerRuntime(ExecutionEnvironment):
                 "/bin/sh", "-c", f"cat > {dest_path}"
             ]
             
-            subprocess.run(cmd, input=content, check=True, timeout=30, encoding='utf-8', errors='replace')
+            # Pass raw bytes; do not set text/encoding when providing binary input
+            subprocess.run(cmd, input=content, check=True, timeout=30)
         except Exception as e:
             self.logger.error(f"Error copying file to container: {e}")
             raise

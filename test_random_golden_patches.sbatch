@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --partition=short
+#SBATCH --partition=gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32GB
-#SBATCH --time=02:00:00
+#SBATCH --time=08:00:00
 #SBATCH --job-name=r2egym_random_test
 #SBATCH --output=logs/%x.%j.out
 
@@ -19,8 +19,8 @@ conda activate r2egym
 export PYTHONPATH="${PYTHONPATH}:$(pwd)/src"
 export PYTHONUNBUFFERED=1
 
-# Get number of instances from command line argument or use default (18)
-NUM_INSTANCES=${1:-18}
+# Get number of instances from command line argument or use default (45)
+NUM_INSTANCES=${1:-45}
 
 # run script
 python3 -u test_random_golden_patches.py \

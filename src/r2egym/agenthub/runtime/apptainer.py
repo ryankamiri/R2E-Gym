@@ -69,17 +69,21 @@ class ApptainerRuntime(ExecutionEnvironment):
         
         try:
             result = subprocess.run(
-                cmd, check=True, capture_output=True, text=True, timeout=600
+                cmd, check=True, capture_output=True, text=True, timeout=1200  # 20 minutes
             )
             self.container_name = name
             self.container = name
             self.logger.info(f"Started Apptainer instance: {name}")
         except subprocess.TimeoutExpired:
-            self.logger.error("Timeout starting Apptainer instance (10 minutes)")
-            raise RuntimeError("Timeout starting Apptainer instance")
+            self.logger.error("Timeout starting Apptainer instance (20 minutes). Image may be too large or network too slow.")
+            self.logger.info("Consider pre-pulling the image with: apptainer pull docker://<image>")
+            raise RuntimeError("Timeout starting Apptainer instance. Image pull took too long.")
         except subprocess.CalledProcessError as e:
             self.logger.error(f"Failed to start Apptainer instance: {e.stderr}")
             raise RuntimeError(f"Failed to start Apptainer instance: {e.stderr}")
+        except Exception as e:
+            self.logger.error(f"Unexpected error starting Apptainer instance: {e}")
+            raise
     
     def stop_container(self):
         """Stop an Apptainer instance."""
@@ -87,7 +91,7 @@ class ApptainerRuntime(ExecutionEnvironment):
             try:
                 subprocess.run(
                     ["apptainer", "instance", "stop", self.container_name],
-                    capture_output=True, text=True, timeout=60
+                    capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=60
                 )
                 self.logger.info(f"Stopped Apptainer instance: {self.container_name}")
             except Exception as e:
@@ -111,7 +115,8 @@ class ApptainerRuntime(ExecutionEnvironment):
         try:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(
-                    subprocess.run, cmd, capture_output=True, text=True, timeout=timeout + 5
+                    subprocess.run, cmd, capture_output=True, text=True, 
+                    encoding='utf-8', errors='replace', timeout=timeout + 5
                 )
                 result = future.result(timeout=timeout + 5)
             
@@ -153,7 +158,8 @@ class ApptainerRuntime(ExecutionEnvironment):
         try:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(
-                    subprocess.run, cmd, capture_output=True, text=True, timeout=timeout + 5
+                    subprocess.run, cmd, capture_output=True, text=True, 
+                    encoding='utf-8', errors='replace', timeout=timeout + 5
                 )
                 result = future.result(timeout=timeout + 5)
             
@@ -186,7 +192,7 @@ class ApptainerRuntime(ExecutionEnvironment):
                 "/bin/sh", "-c", f"cat > {dest_path}"
             ]
             
-            subprocess.run(cmd, input=content, check=True, timeout=30)
+            subprocess.run(cmd, input=content, check=True, timeout=30, encoding='utf-8', errors='replace')
         except Exception as e:
             self.logger.error(f"Error copying file to container: {e}")
             raise

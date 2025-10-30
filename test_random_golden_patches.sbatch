@@ -2,8 +2,9 @@
 #SBATCH --partition=gpu
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
+#SBATCH --gres=gpu:h200:1
 #SBATCH --cpus-per-task=4
-#SBATCH --mem=16GB
+#SBATCH --mem=64GB
 #SBATCH --time=08:00:00
 #SBATCH --job-name=r2egym_random_test
 #SBATCH --output=logs/%x.%j.out
